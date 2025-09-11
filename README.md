@@ -36,7 +36,17 @@ console.log(response.text);
 
 ## API SDK
 
-This library also exposes an SDK for all publically available API endpoints.
+This library also exposes an SDK for all publically available API endpoints in `McpBoss.api`
+
+```typescript
+import { McpBoss } from 'mcpboss';
+
+const mb = new McpBoss();
+
+const { data: servers } = await mb.api.getMcpServers();
+```
+
+This is an auto-generated SDK based on the OpenAPI specification.
 
 ## Configuration
 
