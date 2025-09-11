@@ -21,11 +21,11 @@ export interface McpBossOptions {
 
 export class McpBoss {
   public api = sdk;
-  constructor(options: McpBossOptions) {
+  constructor(options?: McpBossOptions) {
     client.setConfig({
-      baseUrl: options.baseUrl || `https://${options.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
+      baseUrl: options?.baseUrl || `https://${options?.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
       headers: {
-        Authorization: `Bearer ${options.apiKey || process.env.MCPBOSS_API_KEY}`,
+        Authorization: `Bearer ${options?.apiKey || process.env.MCPBOSS_API_KEY}`,
       },
     });
   }
