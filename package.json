@@ -1,0 +1,45 @@
+{
+  "name": "mcpboss",
+  "version": "0.1.0",
+  "description": "Javascript/Typescript SDK for MCP Boss",
+  "homepage": "https://github.com/mcpboss/mcpboss-js#readme",
+  "bugs": {
+    "url": "https://github.com/mcpboss/mcpboss-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcpboss/mcpboss-js.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate": "npx tsx gensdk.ts",
+    "build": "tsdown --format esm --format cjs",
+    "dev": "tsdown --watch"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.83.1",
+    "@tsconfig/recommended": "^1.0.10",
+    "@types/debug": "^4.1.12",
+    "@types/node": "^24.3.1",
+    "np": "^10.2.0",
+    "prettier": "^3.6.2",
+    "tsdown": "^0.15.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "debug": "^4.4.1"
+  }
+}
