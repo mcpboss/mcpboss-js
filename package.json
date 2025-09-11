@@ -1,6 +1,6 @@
 {
   "name": "mcpboss",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Javascript/Typescript SDK for MCP Boss",
   "homepage": "https://github.com/mcpboss/mcpboss-js#readme",
   "bugs": {
