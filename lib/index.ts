@@ -6,14 +6,10 @@ import {
   postAgents,
   postAgentsByAgentIdRuns,
 } from './api/sdk.gen.js';
+import * as sdk from './api/sdk.gen.js';
 import { client } from './api/client.gen.js';
 import type { Agent } from './api/types.gen.js';
 import createDebug from 'debug';
-
-// Re-export the auto-generated SDK
-export * from './api/sdk.gen.js';
-export * from './api/types.gen.js';
-export * from './api/client.gen.js';
 
 const debug = createDebug('mcpboss');
 // src/client.ts
@@ -24,6 +20,7 @@ export interface McpBossOptions {
 }
 
 export class McpBoss {
+  public api = sdk;
   constructor(options: McpBossOptions) {
     client.setConfig({
       baseUrl: options.baseUrl || `https://${options.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
