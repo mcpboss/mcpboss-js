@@ -2,7 +2,6 @@ import {
   getAgents,
   getAgentsByAgentIdRunsByRunId,
   getAgentsLlmModels,
-  getLlmApiKeys,
   postAgents,
   postAgentsByAgentIdRuns,
 } from './api/sdk.gen.js';
@@ -22,12 +21,14 @@ export interface McpBossOptions {
 export class McpBoss {
   public api = sdk;
   constructor(options?: McpBossOptions) {
-    client.setConfig({
+    const config = {
       baseUrl: options?.baseUrl || `https://${options?.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
       headers: {
         Authorization: `Bearer ${options?.apiKey || process.env.MCPBOSS_API_KEY}`,
       },
-    });
+    };
+    client.setConfig(config);
+    debug('McpBoss initialized with config:', config);
   }
 
   async query(
