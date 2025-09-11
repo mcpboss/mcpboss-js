@@ -10,20 +10,25 @@ import { client } from './api/client.gen.js';
 import type { Agent } from './api/types.gen.js';
 import createDebug from 'debug';
 
+// Re-export the auto-generated SDK
+export * from './api/sdk.gen.js';
+export * from './api/types.gen.js';
+export * from './api/client.gen.js';
+
 const debug = createDebug('mcpboss');
 // src/client.ts
 export interface McpBossOptions {
-  apiKey: string;
-  tenantId: string;
+  apiKey?: string;
+  orgId?: string;
   baseUrl?: string;
 }
 
 export class McpBoss {
   constructor(options: McpBossOptions) {
     client.setConfig({
-      baseUrl: options.baseUrl || `https://${options.tenantId}.mcp-boss.com/api/v1`,
+      baseUrl: options.baseUrl || `https://${options.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
       headers: {
-        Authorization: `Bearer ${options.apiKey}`,
+        Authorization: `Bearer ${options.apiKey || process.env.MCPBOSS_API_KEY}`,
       },
     });
   }
@@ -37,6 +42,7 @@ export class McpBoss {
       limitMcpServers?: string[];
       limitTools?: string[];
       dontAutoCreateAgent?: boolean;
+      timeoutInMilliseconds?: number;
     }
   ): Promise<
     | {
@@ -173,8 +179,11 @@ export class McpBoss {
     }
 
     // Poll for the run result
-    let result = null;
     debug(`Now waiting for result...`);
+    const start = Date.now();
+    if (options?.timeoutInMilliseconds) {
+      debug(`Will timeout after ${options.timeoutInMilliseconds} milliseconds`);
+    }
     do {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -194,8 +203,8 @@ export class McpBoss {
       if (data.run.outcome !== 'unknown') {
         debug(`Got outcome: ${data.run.outcome}`);
         if (data.run.output.type === 'error') {
-          result = {
-            text: data.run.output.data,
+          return {
+            text: data.run.output.data || '',
             type: 'error',
           };
         } else {
@@ -203,15 +212,15 @@ export class McpBoss {
             ?.map(x => x.text)
             .filter(x => !!x)
             .join('\n');
-          result = {
-            text: textMessage,
+          return {
+            text: textMessage || '',
             type: 'success',
             fullOutput: data.run.output.data,
           };
         }
       }
-    } while (result === null);
+    } while (options?.timeoutInMilliseconds === undefined || Date.now() - start < options.timeoutInMilliseconds);
 
-    return result;
+    throw new Error('Timeout reached while waiting for run to complete');
   }
 }
