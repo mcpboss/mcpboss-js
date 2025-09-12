@@ -24,16 +24,20 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npx tsx --test 'test/**/*.test.ts'",
     "generate": "npx tsx gensdk.ts",
     "build": "tsdown --format esm --format cjs",
-    "dev": "tsdown --watch"
+    "dev": "tsdown --watch",
+    "release": "tsdown --format esm --format cjs && np --no-tests"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.83.1",
+    "@hey-api/openapi-ts": "0.82.5",
+    "@jest/globals": "^29.7.0",
     "@tsconfig/recommended": "^1.0.10",
     "@types/debug": "^4.1.12",
     "@types/node": "^24.3.1",
+    "msw": "^2.11.2",
+    "node-mock-extended": "^1.0.0",
     "np": "^10.2.0",
     "prettier": "^3.6.2",
     "tsdown": "^0.15.0",

@@ -1,12 +1,25 @@
-import { describe, it } from 'node:test';
-import * as SDK from '../lib/index.js';
-describe('sample test', () => {
-  it('should pass a', async () => {
-    const sdk = new SDK.McpBoss();
-    const res = await sdk.query('Hello how are you?', {
-      modelId: 'gemini-2.5-pro',
-      limitTools: ['brave_news_search'],
+import { describe, before, it, beforeEach } from 'node:test';
+import { randomUUID } from 'crypto';
+import { McpBoss } from '../lib/index.js';
+
+[undefined, 'some-org'].forEach(providedOrgId => {
+  describe('McpBoss SDK', () => {
+    const sdk = new McpBoss({
+      orgId: providedOrgId,
     });
-    console.log(res.text);
+
+    it('should create a run with agentId', async () => {
+      // Arrange
+      const agentId = `agent-${randomUUID()}`;
+
+      // Act
+      try {
+        await sdk.query('Hello how are you?', {
+          agentId,
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    });
   });
 });

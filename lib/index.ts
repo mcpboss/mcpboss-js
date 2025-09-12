@@ -1,17 +1,10 @@
-import {
-  getAgents,
-  getAgentsByAgentIdRunsByRunId,
-  getAgentsLlmModels,
-  postAgents,
-  postAgentsByAgentIdRuns,
-} from './api/sdk.gen.js';
-import * as sdk from './api/sdk.gen.js';
 import { client } from './api/client.gen.js';
+import * as sdk from './api/sdk.gen.js';
 import type { Agent } from './api/types.gen.js';
 import createDebug from 'debug';
 
 const debug = createDebug('mcpboss');
-// src/client.ts
+
 export interface McpBossOptions {
   apiKey?: string;
   orgId?: string;
@@ -21,14 +14,22 @@ export interface McpBossOptions {
 export class McpBoss {
   public api = sdk;
   constructor(options?: McpBossOptions) {
+    const orgId = options?.orgId || process.env.MCPBOSS_ORG_ID || 'api';
+    if (!orgId) {
+      throw new Error('MCPBOSS_ORG_ID environment variable or orgId option is required');
+    }
+    const token = options?.apiKey || process.env.MCPBOSS_API_KEY;
+    if (!token) {
+      throw new Error('MCPBOSS_API_KEY environment variable or apiKey option is required');
+    }
     const config = {
-      baseUrl: options?.baseUrl || `https://${options?.orgId || process.env.MCPBOSS_ORG_ID}.mcp-boss.com/api/v1`,
+      baseUrl: options?.baseUrl || `https://${orgId}.mcp-boss.com/api/v1`,
       headers: {
-        Authorization: `Bearer ${options?.apiKey || process.env.MCPBOSS_API_KEY}`,
+        Authorization: `Bearer ${token}`,
       },
     };
+    debug('McpBoss initialized with config', config);
     client.setConfig(config);
-    debug('McpBoss initialized with config:', config);
   }
 
   async query(
@@ -56,7 +57,7 @@ export class McpBoss {
     debug('Starting query with options:', options);
     let agent: Agent;
     {
-      const { data, error } = await getAgents();
+      const { data, error } = await this.api.getAgents();
       if (error) {
         throw error;
       }
@@ -119,7 +120,7 @@ export class McpBoss {
       } else {
         debug('Did not find existing agent, will attempt to create one. Getting available llm models');
         // Create a new agent if none found
-        const { data: dataModels } = await getAgentsLlmModels({ throwOnError: true });
+        const { data: dataModels } = await this.api.getAgentsLlmModels({ throwOnError: true });
         debug(`Found ${dataModels.models.length} available models`);
         const model =
           dataModels.models.find(m => m.id === options?.modelId) ||
@@ -131,7 +132,7 @@ export class McpBoss {
         debug(
           `Creating agent with model ${model.name} from provider ${model.llmApiId} with key ${options?.llmApiKeyId || 'default key'}`
         );
-        const { data: dataAgent } = await postAgents({
+        const { data: dataAgent } = await this.api.postAgents({
           body: {
             modelId: model.id,
             llmApiId: model.llmApiId,
@@ -155,7 +156,7 @@ export class McpBoss {
     let runId: string;
     {
       debug(`Making request...`);
-      const { data, error } = await postAgentsByAgentIdRuns({
+      const { data, error } = await this.api.postAgentsByAgentIdRuns({
         path: {
           agentId: agent.id,
         },
@@ -185,7 +186,7 @@ export class McpBoss {
     do {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const { data, error } = await getAgentsByAgentIdRunsByRunId({
+      const { data, error } = await this.api.getAgentsByAgentIdRunsByRunId({
         path: {
           agentId: agent.id,
           runId,
