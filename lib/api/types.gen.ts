@@ -19,6 +19,27 @@ export type PurchaseCreditsRequest = {
     amount: number;
 };
 
+export type CreateHostedToolFunctionRequest = {
+    name: string;
+    description?: string;
+    env?: Array<[
+        string,
+        string
+    ]>;
+    runtime: 'node24';
+};
+
+export type UpdateHostedToolFunctionRequest = {
+    name: string;
+    description?: string;
+    env?: Array<[
+        string,
+        string
+    ]>;
+    runtime: 'node24';
+    isEnabled?: boolean;
+};
+
 export type AuthMetadata = {
     isPlayground: boolean;
     serversGranted: Array<{
@@ -100,7 +121,7 @@ export type TenantMcpServer = {
     authorization: {
         method: 'none' | 'oauth' | 'apikey';
     };
-    transportType: 'self' | 'stdio' | 'httpstreaming' | 'sse';
+    transportType: 'self' | 'hosted' | 'stdio' | 'httpstreaming' | 'sse';
     transportConfig: {
         type: 'httpstreaming';
         url: string;
@@ -130,6 +151,9 @@ export type TenantMcpServer = {
     } | {
         type: 'self';
         id: string;
+    } | {
+        type: 'hosted';
+        functionId: string;
     };
     oauthClientConfiguration: null | {
         clientId: string;
@@ -166,6 +190,21 @@ export type TenantMcpServer = {
     isEnabled: boolean;
     createdAt: string;
     updatedAt: string;
+};
+
+export type McpServerRunningStatusResponse = {
+    isDeployed: boolean;
+    isAvailable: boolean;
+    isStabilizing: boolean;
+    pods: Array<McpServerPodStatus>;
+};
+
+export type McpServerPodStatus = {
+    name: string;
+    ready: boolean;
+    phase?: string;
+    reason?: string;
+    createdAt?: string;
 };
 
 export type Tenant = {
@@ -609,6 +648,83 @@ export type UsageAggregationResponse = {
     }>;
 };
 
+export type HostedToolFunction = {
+    id: string;
+    tenantId: string;
+    runtime: 'node24';
+    name: string;
+    description: string;
+    tools: Array<{
+        name: string;
+        description: string;
+        input: Schema0;
+        output?: Schema1;
+    }>;
+    env?: Array<[
+        string,
+        string
+    ]>;
+    isEnabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type ExportedFunction = {
+    name: string;
+    description?: string;
+    parameters: Array<{
+        name: string;
+        type: string;
+    }>;
+};
+
+export type UploadSourceCodeResponse = {
+    success: boolean;
+    message: string;
+    analysisResult?: unknown;
+};
+
+export type DeploymentLogPayload = {
+    type: 'error';
+    message: string;
+} | {
+    type: 'podInfo';
+    createdAt: string;
+    pod: string;
+    initContainers: Array<string>;
+    containers: Array<string>;
+} | {
+    type: 'initContainerRunning';
+    name: string;
+} | {
+    type: 'initContainerTerminated';
+    name: string;
+    exitCode: number;
+    reason?: string;
+    startedAt: string;
+    finishedAt: string;
+} | {
+    type: 'mainContainerRunning';
+} | {
+    type: 'mainContainerReady';
+} | {
+    type: 'mainContainerCrashed';
+    exitCode: number;
+    reason?: string;
+    startedAt: string;
+    finishedAt: string;
+} | {
+    type: 'done';
+};
+
+export type Schema0 = string | number | boolean | null | Array<Schema0> | {
+    [key: string]: Schema0;
+};
+
+export type Schema1 = string | number | boolean | null | Array<Schema1> | {
+    [key: string]: Schema1;
+};
+
 export type TriggerWebhookConfigurationOutput = {
     requiredHeaders?: Array<[
         string,
@@ -935,7 +1051,7 @@ export type GetMcpServersResponses = {
             authorization: {
                 method: 'none' | 'oauth' | 'apikey';
             };
-            transportType: 'self' | 'stdio' | 'httpstreaming' | 'sse';
+            transportType: 'self' | 'hosted' | 'stdio' | 'httpstreaming' | 'sse';
             transportConfig: {
                 type: 'httpstreaming';
                 url: string;
@@ -965,6 +1081,9 @@ export type GetMcpServersResponses = {
             } | {
                 type: 'self';
                 id: string;
+            } | {
+                type: 'hosted';
+                functionId: string;
             };
             oauthClientConfiguration: null | {
                 clientId: string;
@@ -1023,7 +1142,7 @@ export type PostMcpServersData = {
         authorization: {
             method: 'none' | 'oauth' | 'apikey';
         };
-        transportType: 'self' | 'stdio' | 'httpstreaming' | 'sse';
+        transportType: 'self' | 'hosted' | 'stdio' | 'httpstreaming' | 'sse';
         transportConfig: {
             type: 'httpstreaming';
             url: string;
@@ -1180,9 +1299,7 @@ export type GetMcpServersByServerIdRunningStatusResponses = {
     /**
      * Successful response
      */
-    200: {
-        isRunning: boolean;
-    };
+    200: McpServerRunningStatusResponse;
 };
 
 export type GetMcpServersByServerIdRunningStatusResponse = GetMcpServersByServerIdRunningStatusResponses[keyof GetMcpServersByServerIdRunningStatusResponses];
@@ -1232,6 +1349,27 @@ export type PutMcpServersByServerIdIsEnabledResponses = {
 };
 
 export type PutMcpServersByServerIdIsEnabledResponse = PutMcpServersByServerIdIsEnabledResponses[keyof PutMcpServersByServerIdIsEnabledResponses];
+
+export type GetMcpServersByServerIdLogsData = {
+    body?: never;
+    path: {
+        serverId: string;
+    };
+    query?: {
+        /**
+         * If not provided, the latest pod will be used
+         */
+        podName?: string;
+    };
+    url: '/mcp-servers/{serverId}/logs';
+};
+
+export type GetMcpServersByServerIdLogsResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
 
 export type GetMcpServersByServerIdToolsData = {
     body?: never;
@@ -2595,6 +2733,322 @@ export type PostCreditsPurchaseResponses = {
 };
 
 export type PostCreditsPurchaseResponse = PostCreditsPurchaseResponses[keyof PostCreditsPurchaseResponses];
+
+export type GetHostedFunctionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/hosted-functions';
+};
+
+export type GetHostedFunctionsResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        functions: Array<HostedToolFunction>;
+    };
+};
+
+export type GetHostedFunctionsResponse = GetHostedFunctionsResponses[keyof GetHostedFunctionsResponses];
+
+export type PostHostedFunctionsData = {
+    body?: CreateHostedToolFunctionRequest;
+    path?: never;
+    query?: never;
+    url: '/hosted-functions';
+};
+
+export type PostHostedFunctionsResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        function: HostedToolFunction;
+    };
+};
+
+export type PostHostedFunctionsResponse = PostHostedFunctionsResponses[keyof PostHostedFunctionsResponses];
+
+export type GetHostedFunctionsByFunctionIdData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}';
+};
+
+export type GetHostedFunctionsByFunctionIdResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        function: HostedToolFunction;
+    };
+};
+
+export type GetHostedFunctionsByFunctionIdResponse = GetHostedFunctionsByFunctionIdResponses[keyof GetHostedFunctionsByFunctionIdResponses];
+
+export type PutHostedFunctionsByFunctionIdData = {
+    body?: UpdateHostedToolFunctionRequest;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}';
+};
+
+export type PutHostedFunctionsByFunctionIdResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
+
+export type GetHostedFunctionsByFunctionIdEditorInfoData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/editor-info';
+};
+
+export type GetHostedFunctionsByFunctionIdEditorInfoResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        service: unknown;
+        url: string;
+    };
+};
+
+export type GetHostedFunctionsByFunctionIdEditorInfoResponse = GetHostedFunctionsByFunctionIdEditorInfoResponses[keyof GetHostedFunctionsByFunctionIdEditorInfoResponses];
+
+export type PostHostedFunctionsByFunctionIdEnsureEditorData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/ensure-editor';
+};
+
+export type PostHostedFunctionsByFunctionIdEnsureEditorResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
+
+export type PostHostedFunctionsByFunctionIdSaveData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/save';
+};
+
+export type PostHostedFunctionsByFunctionIdSaveResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
+
+export type PostHostedFunctionsByFunctionIdAnalyzeData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/analyze';
+};
+
+export type PostHostedFunctionsByFunctionIdAnalyzeResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        analysis: {
+            functions: Array<ExportedFunction>;
+        };
+    };
+};
+
+export type PostHostedFunctionsByFunctionIdAnalyzeResponse = PostHostedFunctionsByFunctionIdAnalyzeResponses[keyof PostHostedFunctionsByFunctionIdAnalyzeResponses];
+
+export type PostHostedFunctionsByFunctionIdStartData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/start';
+};
+
+export type PostHostedFunctionsByFunctionIdStartResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
+
+export type GetHostedFunctionsByFunctionIdDownloadData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/download';
+};
+
+export type GetHostedFunctionsByFunctionIdDownloadResponses = {
+    /**
+     * Successful response
+     */
+    200: unknown;
+};
+
+export type PostHostedFunctionsByFunctionIdUploadData = {
+    body?: {
+        file: unknown;
+    };
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/upload';
+};
+
+export type PostHostedFunctionsByFunctionIdUploadResponses = {
+    /**
+     * Successful response
+     */
+    200: UploadSourceCodeResponse;
+};
+
+export type PostHostedFunctionsByFunctionIdUploadResponse = PostHostedFunctionsByFunctionIdUploadResponses[keyof PostHostedFunctionsByFunctionIdUploadResponses];
+
+export type GetHostedFunctionsByFunctionIdDeploymentLogsData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: never;
+    url: '/hosted-functions/{functionId}/deployment-logs';
+};
+
+export type GetHostedFunctionsByFunctionIdDeploymentLogsResponses = {
+    /**
+     * Successful response
+     */
+    200: Array<{
+        type: 'error' | 'data';
+        data: Array<DeploymentLogPayload>;
+    }>;
+};
+
+export type GetHostedFunctionsByFunctionIdDeploymentLogsResponse = GetHostedFunctionsByFunctionIdDeploymentLogsResponses[keyof GetHostedFunctionsByFunctionIdDeploymentLogsResponses];
+
+export type GetHostedFunctionsByFunctionIdLogsData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query: {
+        podName: string;
+    };
+    url: '/hosted-functions/{functionId}/logs';
+};
+
+export type GetHostedFunctionsByFunctionIdLogsResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        logs: {
+            stdout: string;
+            stderr: string;
+        };
+    };
+};
+
+export type GetHostedFunctionsByFunctionIdLogsResponse = GetHostedFunctionsByFunctionIdLogsResponses[keyof GetHostedFunctionsByFunctionIdLogsResponses];
+
+export type GetHostedFunctionsByFunctionIdToolsData = {
+    body?: never;
+    path: {
+        functionId: string;
+    };
+    query?: {
+        podName?: string;
+    };
+    url: '/hosted-functions/{functionId}/tools';
+};
+
+export type GetHostedFunctionsByFunctionIdToolsResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        tools: Array<{
+            name: string;
+        }>;
+    };
+};
+
+export type GetHostedFunctionsByFunctionIdToolsResponse = GetHostedFunctionsByFunctionIdToolsResponses[keyof GetHostedFunctionsByFunctionIdToolsResponses];
+
+export type GetDeploymentsLogsData = {
+    body?: never;
+    path?: never;
+    query: {
+        podName: string;
+        previous?: 'true' | 'false';
+    };
+    url: '/deployments/logs';
+};
+
+export type GetDeploymentsLogsResponses = {
+    /**
+     * Successful response
+     */
+    200: {
+        logs: {
+            stdout: string;
+            stderr: string;
+        };
+    };
+};
+
+export type GetDeploymentsLogsResponse = GetDeploymentsLogsResponses[keyof GetDeploymentsLogsResponses];
+
+export type GetDeploymentsDeploymentLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        hostedFunctionId?: string;
+        serverSlug?: string;
+        editorFunctionId?: string;
+    };
+    url: '/deployments/deployment-logs';
+};
+
+export type GetDeploymentsDeploymentLogsResponses = {
+    /**
+     * Successful response
+     */
+    200: Array<{
+        type: 'error' | 'data';
+        data: Array<DeploymentLogPayload>;
+    }>;
+};
+
+export type GetDeploymentsDeploymentLogsResponse = GetDeploymentsDeploymentLogsResponses[keyof GetDeploymentsDeploymentLogsResponses];
 
 export type ClientOptions = {
     baseUrl: `${string}://${string}/api/v1` | (string & {});

@@ -2,6 +2,7 @@ import { client } from './api/client.gen.js';
 import * as sdk from './api/sdk.gen.js';
 import type { Agent } from './api/types.gen.js';
 import createDebug from 'debug';
+import { readConfig } from '../src/config.js';
 
 const debug = createDebug('mcpboss');
 
@@ -11,25 +12,45 @@ export interface McpBossOptions {
   baseUrl?: string;
 }
 
+export function loadConfig(options?: McpBossOptions): McpBossOptions {
+  const config = readConfig();
+
+  const orgId = options?.orgId || process.env.MCPBOSS_ORG_ID || config.orgId || 'api';
+  if (!orgId) {
+    throw new Error('MCPBOSS_ORG_ID environment variable, orgId option, or stored config is required');
+  }
+
+  const token = options?.apiKey || process.env.MCPBOSS_API_KEY || config.apiKey;
+  if (!token) {
+    throw new Error(
+      'MCPBOSS_API_KEY environment variable, apiKey option, or stored config is required. Use "mcpboss auth set" to store credentials.'
+    );
+  }
+
+  const baseUrl =
+    options?.baseUrl || process.env.MCPBOSS_BASE_URL || config.baseUrl || `https://${orgId}.mcp-boss.com/api/v1`;
+
+  return {
+    apiKey: token,
+    orgId,
+    baseUrl,
+  };
+}
+
 export class McpBoss {
   public api = sdk;
   constructor(options?: McpBossOptions) {
-    const orgId = options?.orgId || process.env.MCPBOSS_ORG_ID || 'api';
-    if (!orgId) {
-      throw new Error('MCPBOSS_ORG_ID environment variable or orgId option is required');
-    }
-    const token = options?.apiKey || process.env.MCPBOSS_API_KEY;
-    if (!token) {
-      throw new Error('MCPBOSS_API_KEY environment variable or apiKey option is required');
-    }
-    const config = {
-      baseUrl: options?.baseUrl || `https://${orgId}.mcp-boss.com/api/v1`,
+    // Try to get config from file if not provided via options or env vars
+    const config = loadConfig(options);
+
+    const clientConfig = {
+      baseUrl: config.baseUrl,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
     };
-    debug('McpBoss initialized with config', config);
-    client.setConfig(config);
+    debug('McpBoss initialized with config', clientConfig);
+    client.setConfig(clientConfig);
   }
 
   async query(

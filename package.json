@@ -16,6 +16,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "mcpboss": "./dist/bin/mcpboss.js"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,11 +33,25 @@
     "dev": "tsdown --watch",
     "release": "tsdown --format esm --format cjs && np --no-tests"
   },
+  "dependencies": {
+    "@inquirer/prompts": "^7.8.6",
+    "@types/eventsource": "^1.1.15",
+    "@types/lodash": "^4.17.20",
+    "archiver": "^7.0.1",
+    "commander": "^14.0.1",
+    "console-table-printer": "^2.14.6",
+    "debug": "^4.4.1",
+    "eventsource": "^4.0.0",
+    "js-yaml": "^4.1.0",
+    "lodash": "^4.17.21"
+  },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.82.5",
     "@jest/globals": "^29.7.0",
     "@tsconfig/recommended": "^1.0.10",
+    "@types/archiver": "^6.0.3",
     "@types/debug": "^4.1.12",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.3.1",
     "msw": "^2.11.2",
     "node-mock-extended": "^1.0.0",
@@ -42,8 +59,5 @@
     "prettier": "^3.6.2",
     "tsdown": "^0.15.0",
     "typescript": "^5.9.2"
-  },
-  "dependencies": {
-    "debug": "^4.4.1"
   }
 }
