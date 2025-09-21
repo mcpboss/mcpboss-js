@@ -10,3 +10,4 @@ test_data/
 .env.development
 *.tsbuildinfo
 .vite
+depl
