@@ -1,6 +1,6 @@
 import { type DeploymentLogPayload } from '@/lib/api-generated';
 import { getDeploymentsLogs, getHostedFunctionsByFunctionIdTools } from '@/lib/api-generated/sdk.gen';
-import { useState, useEffect, useRef, use } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Duration, RelativeTime } from '@/components/ui/relative-time';
 import {
@@ -13,12 +13,11 @@ import {
   PackageOpen,
   LoaderCircle,
   Logs,
-  ToolCaseIcon,
   Wrench,
 } from 'lucide-react';
 import { cn, getErrorMessage } from '@/lib/utils';
 
-type ContainerStatus = 'pending' | 'running' | 'completed' | 'failed' | 'ready';
+type ContainerStatus = 'pending' | 'running' | 'completed' | 'failed' | 'ready' | 'crashBackOff';
 
 interface ContainerState {
   name: string;
@@ -28,6 +27,7 @@ interface ContainerState {
   finishedAt?: string;
   exitCode?: number;
   reason?: string;
+  restarts?: number;
 }
 
 interface DeploymentState {
@@ -46,19 +46,21 @@ interface DeploymentState {
   };
 }
 
+export type DeploymentLogsProps = {
+  hostedFunctionId?: string;
+  serverSlug?: string;
+  editorFunctionId?: string;
+  onReady?: () => void;
+  onCrash?: () => void;
+};
+
 export function DeploymentLogs({
   hostedFunctionId,
   serverSlug,
   editorFunctionId,
   onReady,
   onCrash,
-}: {
-  hostedFunctionId?: string;
-  serverSlug?: string;
-  editorFunctionId?: string;
-  onReady?: () => void;
-  onCrash?: () => void;
-}) {
+}: DeploymentLogsProps) {
   const [logs, setLogs] = useState<DeploymentLogPayload[]>([]);
   const [deploymentState, setDeploymentState] = useState<DeploymentState>({
     containers: {},
@@ -213,6 +215,29 @@ export function DeploymentLogs({
               }
               break;
 
+            case 'mainContainerCrashBackOff':
+              // Find the main container and mark it as crash back off
+              Object.keys(newState.containers).forEach(name => {
+                if (newState.containers[name].type === 'main') {
+                  newState.containers[name] = {
+                    ...newState.containers[name],
+                    status: 'crashBackOff',
+                    reason: newLog.reason,
+                    restarts: newLog.restarts,
+                  };
+                }
+              });
+
+              // Fetch crash logs if we have pod info and don't already have crash logs
+              if (newState.podInfo && !newState.crashLogs) {
+                // Use setTimeout to avoid calling async function in setState
+                setTimeout(() => {
+                  fetchCrashLogs(newState.podInfo!.pod);
+                }, 0);
+              }
+              break;
+              break;
+
             case 'error':
               newState.errors = [...newState.errors, newLog.message];
               break;
@@ -298,7 +323,7 @@ export function DeploymentLogs({
     const attemptFetch = async (): Promise<void> => {
       try {
         const response = await getDeploymentsLogs({
-          query: { podName },
+          query: { podName, previous: 'true' },
         });
 
         if (response.error) {
@@ -356,6 +381,8 @@ export function DeploymentLogs({
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'failed':
         return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'crashBackOff':
+        return <AlertCircle className="h-4 w-4 text-orange-500" />;
     }
   };
 
@@ -371,6 +398,8 @@ export function DeploymentLogs({
         return <Badge variant="destructive">Failed</Badge>;
       case 'ready':
         return <Badge variant="success">Ready</Badge>;
+      case 'crashBackOff':
+        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Waiting (Crash Back Off)</Badge>;
     }
   };
 
@@ -391,6 +420,11 @@ export function DeploymentLogs({
       </div>
       <div className="flex items-center gap-3">
         {getStatusBadge(container.status)}
+        {container.restarts !== undefined && container.restarts > 0 && (
+          <span className="text-sm font-mono px-2 py-1 rounded bg-orange-100 text-orange-800">
+            Restarts: {container.restarts}
+          </span>
+        )}
         {container.exitCode !== undefined && container.exitCode !== 0 && (
           <span
             className={cn(

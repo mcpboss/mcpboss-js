@@ -9,6 +9,7 @@ import { McpBoss, loadConfig } from '../lib/index.js';
 import { HostedToolFunction, DeploymentLogPayload } from '../lib/api/types.gen.js';
 import { EventSource } from 'eventsource';
 import { formDataBodySerializer } from '../lib/api/core/bodySerializer.gen.js';
+import { output, outputError, outputInfo } from './output.js';
 
 export interface HostedFunctionInfo {
   id: string;
@@ -186,8 +187,6 @@ export async function uploadZipToFunction(mcpBoss: McpBoss, functionId: string, 
   if (!uploadResponse.ok || uploadResponse.status !== 200) {
     throw new Error(`Failed to upload ZIP file: ${getErrorMessage(await uploadResponse.json())}`);
   }
-
-  console.log('✅ ZIP file uploaded successfully');
 }
 
 export async function startHostedFunction(mcpBoss: McpBoss, functionId: string): Promise<void> {
@@ -198,11 +197,12 @@ export async function startHostedFunction(mcpBoss: McpBoss, functionId: string):
   if (error) {
     throw new Error(`Failed to start hosted function: ${getErrorMessage(error)}`);
   }
-
-  console.log('✅ Hosted function started successfully');
 }
 
-async function fetchCrashLogs(mcpBoss: McpBoss, podName: string): Promise<{ stdout: string; stderr: string } | null> {
+export async function fetchCrashLogs(
+  mcpBoss: McpBoss,
+  podName: string
+): Promise<{ stdout: string; stderr: string } | null> {
   const maxRetries = 50; // 50 retries * 100ms = 5 seconds max
   let retryCount = 0;
 
@@ -241,7 +241,7 @@ async function fetchCrashLogs(mcpBoss: McpBoss, podName: string): Promise<{ stdo
   return attemptFetch();
 }
 
-type ContainerStatus = 'pending' | 'running' | 'completed' | 'failed' | 'ready';
+type ContainerStatus = 'pending' | 'running' | 'completed' | 'failed' | 'ready' | 'crashBackOff';
 
 interface ContainerState {
   name: string;
@@ -251,6 +251,7 @@ interface ContainerState {
   finishedAt?: string;
   exitCode?: number;
   reason?: string;
+  restarts?: number;
 }
 
 interface DeploymentState {
@@ -265,13 +266,17 @@ interface DeploymentState {
   isComplete: boolean;
   isReady: boolean;
   hasCrashed: boolean;
-  crashLogs?: {
-    stdout: string;
-    stderr: string;
-  };
 }
 
-export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: string): Promise<void> {
+export async function showDeploymentProgress(
+  mcpBoss: McpBoss,
+  functionId: string,
+  follow: boolean
+): Promise<{
+  deployed: boolean;
+  stabilized: boolean;
+  podName?: string;
+}> {
   return new Promise((resolve, reject) => {
     const deploymentState: DeploymentState = {
       containers: {},
@@ -287,7 +292,7 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
     // Create EventSource URL with query parameter
     const eventSourceUrl = `${config.baseUrl}/deployments/deployment-logs?hostedFunctionId=${functionId}`;
 
-    console.log('📦 Monitoring deployment progress...\n');
+    outputInfo('Deployment progress...');
 
     const eventSource = new EventSource(eventSourceUrl, {
       fetch: (input, init) =>
@@ -311,94 +316,60 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
           return '✅';
         case 'failed':
           return '❌';
+        case 'crashBackOff':
+          return '🔄';
       }
-    };
-
-    const printContainerStatus = (container: ContainerState) => {
-      const icon = getStatusIcon(container.status);
-      const statusText = container.status.charAt(0).toUpperCase() + container.status.slice(1);
-      const exitCodeText =
-        container.exitCode !== undefined && container.exitCode !== 0 ? ` (exit ${container.exitCode})` : '';
-      console.log(`  ${icon} ${container.name}: ${statusText}${exitCodeText}`);
     };
 
     const printCurrentState = () => {
       console.clear();
-      console.log('📦 Deployment Progress\n');
-
+      outputInfo('Deployment progress...');
+      let toLog: Record<string, any> = {};
       if (deploymentState.podInfo) {
-        console.log(`🏷️  Pod: ${deploymentState.podInfo.pod}\n`);
+        toLog.deploymentId = deploymentState.podInfo.pod;
 
+        toLog.init = [];
         if (deploymentState.podInfo.initContainers.length > 0) {
-          console.log('🔧 Initialization:');
           deploymentState.podInfo.initContainers.forEach(name => {
             if (deploymentState.containers[name]) {
-              printContainerStatus(deploymentState.containers[name]);
+              const container = deploymentState.containers[name];
+              const logEntry: any = {
+                name: container.name,
+                status: container.status,
+              };
+              if (container.exitCode !== undefined) logEntry.exitCode = container.exitCode;
+              if (container.reason) logEntry.reason = container.reason;
+              if (container.restarts !== undefined && container.restarts > 0) logEntry.restarts = container.restarts;
+              toLog.init.push(logEntry);
             }
           });
-          console.log('');
         }
 
+        toLog.app = [];
         if (deploymentState.podInfo.containers.length > 0) {
-          console.log('🚀 Application:');
           deploymentState.podInfo.containers.forEach(name => {
             if (deploymentState.containers[name]) {
-              printContainerStatus(deploymentState.containers[name]);
+              const container = deploymentState.containers[name];
+              const logEntry: any = {
+                name: container.name,
+                status: container.status,
+              };
+              if (container.exitCode !== undefined) logEntry.exitCode = container.exitCode;
+              if (container.reason) logEntry.reason = container.reason;
+              if (container.restarts !== undefined && container.restarts > 0) logEntry.restarts = container.restarts;
+              toLog.app.push(logEntry);
             }
           });
-          console.log('');
         }
       }
 
       if (deploymentState.errors.length > 0) {
-        console.log('❌ Errors:');
         deploymentState.errors.forEach(error => {
-          console.log(`  • ${error}`);
+          outputError(error);
         });
-        console.log('');
       }
 
-      if (deploymentState.isReady) {
-        console.log('🎉 Deployment completed successfully! Function is ready to use.');
-      } else if (deploymentState.hasCrashed) {
-        console.log('💥 Deployment failed! Check the logs for more details.');
-      }
-
-      // Display crash logs if available
-      if (deploymentState.crashLogs) {
-        console.log('📋 Container Logs:');
-        console.log(deploymentState.crashLogs.stdout);
-        if (deploymentState.crashLogs.stdout) {
-          console.log('   📤 stdout:');
-          console.log('   ┌─────────────────────────────────────────────────');
-          deploymentState.crashLogs.stdout
-            .trim()
-            .split('\n')
-            .forEach(line => {
-              console.log(`   │ ${line}`);
-            });
-          console.log('   └─────────────────────────────────────────────────');
-          console.log('');
-        }
-
-        if (deploymentState.crashLogs.stderr) {
-          console.log('   🚨 stderr:');
-          console.log('   ┌─────────────────────────────────────────────────');
-          deploymentState.crashLogs.stderr
-            .trim()
-            .split('\n')
-            .forEach(line => {
-              console.log(`   │ ${line}`);
-            });
-          console.log('   └─────────────────────────────────────────────────');
-          console.log('');
-        }
-
-        if (!deploymentState.crashLogs.stdout && !deploymentState.crashLogs.stderr) {
-          console.log('   📄 No logs available for this container crash.');
-          console.log('');
-        }
-      }
+      output(toLog);
     };
 
     eventSource.addEventListener('DeploymentLogPayload', (event: any) => {
@@ -412,16 +383,17 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
 
           // Check if deployment crashed before resolving
           if (deploymentState.hasCrashed) {
-            // Give some time for crash logs to be fetched (up to 2 seconds)
-            setTimeout(() => {
-              const mainContainer = Object.values(deploymentState.containers).find(c => c.type === 'main');
-              const errorMessage = mainContainer?.reason
-                ? `Deployment failed - main container crashed: ${mainContainer.reason} (exit code: ${mainContainer.exitCode})`
-                : `Deployment failed - main container crashed (exit code: ${mainContainer?.exitCode || 'unknown'})`;
-              reject(new Error(errorMessage));
-            }, 2000);
+            resolve({
+              deployed: true,
+              stabilized: false,
+              podName: deploymentState.podInfo?.pod,
+            });
           } else {
-            resolve();
+            resolve({
+              deployed: true,
+              stabilized: true,
+              podName: deploymentState.podInfo?.pod,
+            });
           }
           return;
         }
@@ -499,6 +471,18 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
               }
             });
             deploymentState.isReady = true;
+
+            // If not following, close the connection and resolve immediately
+            if (!follow) {
+              eventSource.close();
+              printCurrentState();
+              resolve({
+                deployed: true,
+                stabilized: true,
+                podName: deploymentState.podInfo?.pod,
+              });
+              return;
+            }
             break;
 
           case 'mainContainerCrashed':
@@ -517,55 +501,74 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
             });
             deploymentState.hasCrashed = true;
 
-            // Fetch crash logs if we have pod info
-            if (deploymentState.podInfo) {
-              console.log('\n🔍 Fetching crash logs...');
-              fetchCrashLogs(mcpBoss, deploymentState.podInfo.pod)
-                .then(logs => {
-                  if (logs) {
-                    deploymentState.crashLogs = logs;
-                    console.log('✅ Crash logs fetched');
-                    printCurrentState();
-                  } else {
-                    console.log('⚠️  No crash logs available');
-                  }
-                })
-                .catch(error => {
-                  console.error(`❌ Failed to fetch crash logs: ${getErrorMessage(error)}`);
-                });
+            // If not following, close and return failed status immediately
+            if (!follow) {
+              eventSource.close();
+              printCurrentState();
+              resolve({
+                deployed: true,
+                stabilized: false,
+                podName: deploymentState.podInfo?.pod,
+              });
+              return;
             }
             break;
 
           case 'error':
             deploymentState.errors.push(newLog.message);
             break;
+
+          default:
+            // Handle new message types like mainContainerCrashBackOff
+            if ((newLog as any).type === 'mainContainerCrashBackOff') {
+              // Find the main container and mark it as crash back off
+              Object.keys(deploymentState.containers).forEach(name => {
+                if (deploymentState.containers[name].type === 'main') {
+                  deploymentState.containers[name] = {
+                    ...deploymentState.containers[name],
+                    status: 'crashBackOff',
+                    reason: (newLog as any).reason,
+                    restarts: (newLog as any).restarts,
+                  };
+                }
+              });
+            }
+            break;
         }
 
         printCurrentState();
 
-        // If ready, resolve successfully
-        if (deploymentState.isReady) {
+        // If ready and following, resolve successfully
+        // If ready and not following, we already resolved in the mainContainerReady case
+        if (deploymentState.isReady && follow) {
           eventSource.close();
-          resolve();
+          resolve({
+            deployed: true,
+            stabilized: true,
+            podName: deploymentState.podInfo?.pod,
+          });
         }
 
-        // If crashed, wait a moment for logs then reject with error
-        if (deploymentState.hasCrashed) {
+        // If crashed and following, return failed status instead of rejecting
+        // If crashed and not following, we already handled this in the mainContainerCrashed case
+        if (deploymentState.hasCrashed && follow) {
           eventSource.close();
-
-          // Give some time for crash logs to be fetched (up to 2 seconds)
-          setTimeout(() => {
-            const mainContainer = Object.values(deploymentState.containers).find(c => c.type === 'main');
-            const errorMessage = mainContainer?.reason
-              ? `Deployment failed - main container crashed: ${mainContainer.reason} (exit code: ${mainContainer.exitCode})`
-              : `Deployment failed - main container crashed (exit code: ${mainContainer?.exitCode || 'unknown'})`;
-            reject(new Error(errorMessage));
-          }, 2000);
+          resolve({
+            deployed: true,
+            stabilized: false,
+            podName: deploymentState.podInfo?.pod,
+          });
         }
       } catch (error) {
         console.error('Error parsing deployment log:', error);
         deploymentState.errors.push('Failed to parse deployment log');
         printCurrentState();
+        eventSource.close();
+        resolve({
+          deployed: false,
+          stabilized: false,
+          podName: deploymentState.podInfo?.pod,
+        });
       }
     });
 
@@ -574,7 +577,11 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
       deploymentState.errors.push('Connection error occurred');
       printCurrentState();
       eventSource.close();
-      reject(new Error('Failed to monitor deployment progress'));
+      resolve({
+        deployed: false,
+        stabilized: false,
+        podName: deploymentState.podInfo?.pod,
+      });
     };
 
     // Timeout after 5 minutes
@@ -582,7 +589,11 @@ export async function showDeploymentProgress(mcpBoss: McpBoss, functionId: strin
       () => {
         if (!deploymentState.isComplete) {
           eventSource.close();
-          reject(new Error('Deployment monitoring timed out after 5 minutes'));
+          resolve({
+            deployed: false,
+            stabilized: false,
+            podName: deploymentState.podInfo?.pod,
+          });
         }
       },
       5 * 60 * 1000
@@ -598,6 +609,22 @@ export async function listHostedFunctions(mcpBoss: McpBoss): Promise<HostedToolF
   }
 
   return data?.functions || [];
+}
+
+export async function getHostedFunction(mcpBoss: McpBoss, functionId: string): Promise<HostedToolFunction> {
+  const { data, error } = await mcpBoss.api.getHostedFunctionsByFunctionId({
+    path: { functionId },
+  });
+
+  if (error) {
+    throw new Error(`Failed to get hosted function: ${getErrorMessage(error)}`);
+  }
+
+  if (!data?.function) {
+    throw new Error(`Hosted function with ID ${functionId} not found`);
+  }
+
+  return data.function;
 }
 
 export async function cleanupZipFile(zipPath: string): Promise<void> {

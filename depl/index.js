@@ -1,5 +1,4 @@
 import z from 'zod';
-import { nanoid } from 'nanoid';
 
 export const schema = {
   add: {
@@ -15,9 +14,6 @@ export const schema = {
 
 export function add({ a, b } = params) {
   return String(a + b + 10);
-}
-export function get_id() {
-  return nanoid();
 }
 export function get_var14() {
   return process.env.var1;

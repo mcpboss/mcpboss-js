@@ -16,6 +16,9 @@ import {
   showDeploymentProgress,
   cleanupZipFile,
   listHostedFunctions,
+  getHostedFunction,
+  fetchCrashLogs,
+  getErrorMessage,
 } from './hosted.js';
 import {
   output,
@@ -27,6 +30,8 @@ import {
   OutputFormat,
   TableColumn,
 } from './output.js';
+import { getDeploymentsStatus } from '../lib/api/sdk.gen.js';
+import { UpdateHostedToolFunctionRequest } from '../lib/api/types.gen.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -170,7 +175,10 @@ program
       .description('Deploy hosted tool function (new or existing)')
       .argument('[path]', 'Root directory path for deployment (default: current directory)', process.cwd())
       .option('-i, --id <id>', 'Hosted function ID (if not provided, will create new)')
-      .action(async (path: string, options: { id?: string }) => {
+      .option('--no-progress', 'Skip deployment progress monitoring')
+      .option('--no-logs', 'Skip fetching crash logs on deployment failure')
+      .action(async (path: string, options: { id?: string; progress: boolean; logs: boolean }) => {
+        let zipPath = '';
         try {
           const mcpBoss = new McpBoss();
           let functionId = options.id;
@@ -186,14 +194,12 @@ program
               process.exit(0);
             }
 
-            outputProgress(`Creating new hosted function: ${name}`);
+            outputInfo(`Creating new hosted function: ${name}`);
             const functionInfo = await createHostedFunction(mcpBoss, name!);
             functionId = functionInfo.id;
-            outputProgress(`Created hosted function with ID: ${functionId}`);
+            outputInfo(`Created hosted function with ID: ${functionId}`);
           }
 
-          // Step 2: Check for index.js file
-          outputProgress('🔍 Checking for index.js file...');
           const indexCheck = checkIndexJsExists(deploymentPath);
           if (!indexCheck.exists) {
             outputError(
@@ -203,49 +209,191 @@ program
           }
 
           if (!indexCheck.hasSchema) {
-            outputProgress('⚠️  Warning: index.js does not contain a schema export.');
-            outputProgress('   Make sure your file exports a schema:');
-            outputProgress('   • ES modules: export const schema = { ... }');
-            outputProgress('   • CommonJS: module.exports.schema = { ... }');
-            outputProgress('   Proceeding anyway...');
+            outputInfo(
+              `Warning: index.js does not contain a schema export.` +
+                `Make sure your file exports a schema: ` +
+                `• ES modules: export const schema = { ... }` +
+                `• CommonJS: module.exports.schema = { ... }` +
+                `Proceeding anyway...`
+            );
           }
 
           // Step 3: Create ZIP package
-          outputProgress('Creating deployment package...');
-          const zipPath = await createZipFromDirectory(deploymentPath);
+          outputInfo('Creating deployment package...');
+          zipPath = await createZipFromDirectory(deploymentPath);
 
           // Step 4: Upload ZIP
-          outputProgress('Deploying...');
+          outputInfo('Deploying...');
           await uploadZipToFunction(mcpBoss, functionId, zipPath);
           await startHostedFunction(mcpBoss, functionId);
 
-          // Step 5: Show deployment progress
-          try {
-            await showDeploymentProgress(mcpBoss, functionId);
-
-            // Step 6: Cleanup
-            await cleanupZipFile(zipPath);
-
-            outputSuccess('Successfully deployed and started hosted function!', {
-              functionId,
-              nextSteps: [
-                'Your function is now running and available to agents',
-                'You can view logs and manage the function through the MCP Boss dashboard',
-                `Use "mcpboss hosted deploy --id ${functionId} [path]" to update this function`,
-              ],
+          // Step 5: Show deployment progress (if not disabled)
+          if (options.progress) {
+            const result = await showDeploymentProgress(mcpBoss, functionId, false);
+            output({
+              deployed: result.deployed,
+              stabilized: result.stabilized,
             });
-          } catch (error) {
-            // Step 6: Cleanup even on failure
-            await cleanupZipFile(zipPath);
 
-            outputError(`Deployment failed: ${error}`);
-            outputInfo('You can check the deployment status and logs in the MCP Boss dashboard');
-            return;
+            // Print logs unless --no-logs and if deployment failed
+            if (options.logs && !result.stabilized) {
+              try {
+                let podName = result.podName;
+                if (!podName) {
+                  // Fallback: get podName from deployment status
+                  const state = await getDeploymentsStatus({ query: { hostedFunctionId: functionId } });
+                  const deployments = state.data?.deployments || [];
+                  podName = deployments.length > 0 ? deployments[0].name : undefined;
+                }
+
+                if (podName) {
+                  const crashLogs = await fetchCrashLogs(mcpBoss, podName);
+                  if (crashLogs) {
+                    output(crashLogs.stdout);
+                  }
+                }
+              } catch (logError) {
+                outputError(`Failed to fetch crash logs: ${logError}`);
+              }
+            }
+
+            // Exit with error code if deployment failed
+            if (!result.stabilized) {
+              process.exit(1);
+            }
+
+            // If stabilized, call endpoint to get tools for final validation
+            const tools = await mcpBoss.api.getHostedFunctionsByFunctionIdTools({ path: { functionId } });
+            if (tools.error) {
+              outputError(`Failed to validate deployed function tools: ${getErrorMessage(tools.error)}`);
+              process.exit(1);
+            }
+
+            output(tools.data);
+          } else {
+            output({
+              deployed: true,
+              stabilized: 'unknown',
+            });
           }
+          process.exit(0);
         } catch (error) {
           outputError(error);
+        } finally {
+          if (zipPath) {
+            // Step 6: Cleanup even on failure
+            cleanupZipFile(zipPath).catch(err => outputError(`Error cleaning up temp file: ${err}`));
+          }
         }
       })
+  )
+  .addCommand(
+    new Command('update')
+      .description('Update hosted tool function metadata (name, description, environment variables)')
+      .argument('<functionId>', 'Hosted function ID to update')
+      .option('-n, --name <name>', 'Update function name')
+      .option('-d, --description <description>', 'Update function description')
+      .option('-E, --is-enabled <isEnabled>', 'Update function enabled status (true or false)')
+      .option(
+        '-e, --env <key=value>',
+        'Set environment variable (can be used multiple times)',
+        (value, previous: Array<{ key: string; value: string }> = []) => {
+          const [key, val] = value.split('=');
+          if (!key || val === undefined) {
+            throw new Error('Environment variables must be in format KEY=VALUE');
+          }
+          return [...previous, { key, value: val }];
+        }
+      )
+      .addHelpText(
+        'after',
+        `
+Examples:
+  $ mcpboss hosted update func123 --name "My Updated Function"
+  $ mcpboss hosted update func123 --description "A better description"
+  $ mcpboss hosted update func123 --env API_KEY=secret123
+  $ mcpboss hosted update func123 --env DB_URL=postgres://localhost --env DEBUG=true
+  $ mcpboss hosted update func123 --name "New Name" --description "New desc" --env PORT=3000`
+      )
+      .action(
+        async (
+          functionId: string,
+          options: {
+            name?: string;
+            description?: string;
+            env?: Array<{ key: string; value: string }>;
+            enabled?: string;
+          }
+        ) => {
+          try {
+            const mcpBoss = new McpBoss();
+
+            // Verify the function exists and get current details
+            let currentFunction;
+            try {
+              currentFunction = await getHostedFunction(mcpBoss, functionId);
+            } catch (error) {
+              outputError(`Hosted function with ID ${functionId} not found`);
+              process.exit(1);
+            }
+
+            // Check if any updates were provided
+            if (!options.name && !options.description && !options.env) {
+              outputError('No updates provided. Use --name, --description, or --env options.');
+              process.exit(1);
+            }
+
+            // Prepare update payload
+            const updateData: UpdateHostedToolFunctionRequest = {};
+
+            if (options.name) {
+              updateData.name = options.name;
+            }
+
+            if (options.description) {
+              updateData.description = options.description;
+            }
+
+            if (options.enabled !== undefined) {
+              updateData.isEnabled = options.enabled.toLowerCase() === 'true';
+            }
+
+            // Handle environment variables
+            if (options.env) {
+              // Start with existing env vars if not clearing
+              const existingEnv = currentFunction.env || [];
+              const envMap = new Map(existingEnv);
+
+              // Add/update new env vars
+              options.env.forEach(({ key, value }) => {
+                envMap.set(key, value);
+              });
+
+              updateData.env = Array.from(envMap.entries());
+            }
+
+            outputProgress(`📝 Updating hosted function: ${currentFunction.name} (${functionId})`);
+
+            const { error } = await mcpBoss.api.putHostedFunctionsByFunctionId({
+              path: { functionId },
+              body: updateData,
+            });
+
+            if (error) {
+              outputError(`Failed to update hosted function: ${getErrorMessage(error)}`);
+              process.exit(1);
+            }
+
+            // Get updated function details
+            const updatedFunction = await getHostedFunction(mcpBoss, functionId);
+
+            output(updatedFunction);
+          } catch (error) {
+            outputError(error);
+            process.exit(1);
+          }
+        }
+      )
   )
   .addCommand(
     new Command('ls').description('List hosted tool functions').action(async () => {
@@ -312,6 +460,50 @@ program
         } catch (error) {
           outputError(error);
         }
+      })
+  )
+  .addCommand(
+    new Command('get')
+      .description('Get hosted tool function details and show deployment logs')
+      .argument('<functionId>', 'Hosted function ID to retrieve')
+      .action(async (functionId: string) => {
+        const mcpBoss = new McpBoss();
+
+        outputProgress(`📄 Retrieving hosted function: ${functionId}`);
+
+        // Get the hosted function details
+        const hostedFunction = await getHostedFunction(mcpBoss, functionId);
+        const state = await getDeploymentsStatus({ query: { hostedFunctionId: functionId } });
+
+        output({ ...hostedFunction, ...state.data });
+      })
+  )
+  .addCommand(
+    new Command('show')
+      .description('Show hosted tool deployment')
+      .argument('<functionId>', 'Hosted function ID to retrieve')
+      .action(async (functionId: string) => {
+        const mcpBoss = new McpBoss();
+        const result = await showDeploymentProgress(mcpBoss, functionId, false);
+        if (result.stabilized && result.podName) {
+          const tools = await mcpBoss.api.getHostedFunctionsByFunctionIdTools({ path: { functionId } });
+          if (tools.error) {
+            outputError(`Failed to validate deployed function tools: ${getErrorMessage(tools.error)}`);
+            process.exit(1);
+          }
+
+          output(tools.data);
+        } else if (!result.stabilized && result.podName) {
+          // get logs
+          if (result.podName) {
+            const logs = await fetchCrashLogs(mcpBoss, result.podName);
+            if (logs) {
+              output(logs.stdout);
+              output(logs.stderr);
+            }
+          }
+        }
+        process.exit(0);
       })
   );
 

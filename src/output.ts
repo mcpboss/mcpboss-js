@@ -112,22 +112,119 @@ export function output(
             }
           } else {
             // Fallback: create a simple table without column configuration
-            const table = new Table();
+            // For single objects, show properties as rows
+            if (Object.keys(data).length > 0) {
+              const table = new Table({
+                columns: [
+                  { name: 'property', title: 'Property', alignment: 'left' },
+                  { name: 'value', title: 'Value', alignment: 'left' },
+                ],
+              });
 
-            // Check for nested arrays (legacy support)
-            const firstKey = Object.keys(data)[0];
-            const firstValue = data[firstKey];
-            if (Array.isArray(firstValue)) {
-              if (firstValue.length === 0) {
-                writeFn(`No ${firstKey} found.`);
-              } else {
-                firstValue.forEach(item => table.addRow(item));
+              let hasRows = false;
+              // Convert object properties to rows, but skip only non-empty nested objects and arrays
+              Object.entries(data).forEach(([key, value]) => {
+                if (value === null || typeof value !== 'object') {
+                  // Include primitives and null
+                  table.addRow({
+                    property: key,
+                    value: value,
+                  });
+                  hasRows = true;
+                } else if (Array.isArray(value) && value.length === 0) {
+                  // Include empty arrays
+                  table.addRow({
+                    property: key,
+                    value: '[]',
+                  });
+                  hasRows = true;
+                } else if (!Array.isArray(value) && Object.keys(value).length === 0) {
+                  // Include empty objects
+                  table.addRow({
+                    property: key,
+                    value: '{}',
+                  });
+                  hasRows = true;
+                }
+              });
+
+              // Only print the main table if it has rows
+              if (hasRows) {
                 table.printTable();
               }
-            } else {
-              table.addRow(data);
-              table.printTable();
             }
+
+            // Recursive function to handle nested structures
+            const displayNestedData = (obj: any, prefix = '') => {
+              for (const [key, value] of Object.entries(obj)) {
+                const fullKey = prefix ? `${prefix}.${key}` : key;
+
+                // Check for nested arrays, create one new table per array
+                if (Array.isArray(value)) {
+                  if (value.length > 0) {
+                    writeFn(`\n${fullKey}:`);
+                    const nestedTable = new Table();
+                    value.forEach((item: any) => {
+                      if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+                        nestedTable.addRow(item);
+                      } else {
+                        nestedTable.addRow({ value: item });
+                      }
+                    });
+                    nestedTable.printTable();
+
+                    // Recursively process objects within the array
+                    value.forEach((item: any, index: number) => {
+                      if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+                        displayNestedData(item, `${fullKey}[${index}]`);
+                      }
+                    });
+                  }
+                }
+                // Check for nested objects, create one new table per object
+                else if (
+                  typeof value === 'object' &&
+                  value !== null &&
+                  !Array.isArray(value) &&
+                  Object.keys(value).length > 0
+                ) {
+                  writeFn(`\n${fullKey}:`);
+                  const nestedTable = new Table({
+                    columns: [
+                      { name: 'property', title: 'Property', alignment: 'left' },
+                      { name: 'value', title: 'Value', alignment: 'left' },
+                    ],
+                  });
+
+                  // Convert object properties to rows (only primitive values)
+                  Object.entries(value).forEach(([propKey, propValue]) => {
+                    if (propValue === null || typeof propValue !== 'object') {
+                      nestedTable.addRow({
+                        property: propKey,
+                        value: propValue,
+                      });
+                    } else if (Array.isArray(propValue) && propValue.length === 0) {
+                      nestedTable.addRow({
+                        property: propKey,
+                        value: '[]',
+                      });
+                    } else if (!Array.isArray(propValue) && Object.keys(propValue).length === 0) {
+                      nestedTable.addRow({
+                        property: propKey,
+                        value: '{}',
+                      });
+                    }
+                  });
+
+                  nestedTable.printTable();
+
+                  // Recursively process nested structures
+                  displayNestedData(value, fullKey);
+                }
+              }
+            };
+
+            displayNestedData(data);
           }
         } else {
           // Fallback to text for non-tabular data

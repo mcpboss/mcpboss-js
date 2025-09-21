@@ -30,13 +30,13 @@ export type CreateHostedToolFunctionRequest = {
 };
 
 export type UpdateHostedToolFunctionRequest = {
-    name: string;
+    name?: string;
     description?: string;
     env?: Array<[
         string,
         string
     ]>;
-    runtime: 'node24';
+    runtime?: 'node24';
     isEnabled?: boolean;
 };
 
@@ -684,6 +684,21 @@ export type UploadSourceCodeResponse = {
     analysisResult?: unknown;
 };
 
+export type DeploymentStatusResponse = {
+    isDeployed: boolean;
+    isAvailable: boolean;
+    isStabilizing: boolean;
+    deployments: Array<DeploymentStatus>;
+};
+
+export type DeploymentStatus = {
+    name: string;
+    ready: boolean;
+    phase?: string;
+    reason?: string;
+    createdAt?: string;
+};
+
 export type DeploymentLogPayload = {
     type: 'error';
     message: string;
@@ -703,6 +718,13 @@ export type DeploymentLogPayload = {
     reason?: string;
     startedAt: string;
     finishedAt: string;
+} | {
+    type: 'mainContainerWaiting';
+    reason: string;
+} | {
+    type: 'mainContainerCrashBackOff';
+    reason: string;
+    restarts: number;
 } | {
     type: 'mainContainerRunning';
 } | {
@@ -2933,52 +2955,6 @@ export type PostHostedFunctionsByFunctionIdUploadResponses = {
 
 export type PostHostedFunctionsByFunctionIdUploadResponse = PostHostedFunctionsByFunctionIdUploadResponses[keyof PostHostedFunctionsByFunctionIdUploadResponses];
 
-export type GetHostedFunctionsByFunctionIdDeploymentLogsData = {
-    body?: never;
-    path: {
-        functionId: string;
-    };
-    query?: never;
-    url: '/hosted-functions/{functionId}/deployment-logs';
-};
-
-export type GetHostedFunctionsByFunctionIdDeploymentLogsResponses = {
-    /**
-     * Successful response
-     */
-    200: Array<{
-        type: 'error' | 'data';
-        data: Array<DeploymentLogPayload>;
-    }>;
-};
-
-export type GetHostedFunctionsByFunctionIdDeploymentLogsResponse = GetHostedFunctionsByFunctionIdDeploymentLogsResponses[keyof GetHostedFunctionsByFunctionIdDeploymentLogsResponses];
-
-export type GetHostedFunctionsByFunctionIdLogsData = {
-    body?: never;
-    path: {
-        functionId: string;
-    };
-    query: {
-        podName: string;
-    };
-    url: '/hosted-functions/{functionId}/logs';
-};
-
-export type GetHostedFunctionsByFunctionIdLogsResponses = {
-    /**
-     * Successful response
-     */
-    200: {
-        logs: {
-            stdout: string;
-            stderr: string;
-        };
-    };
-};
-
-export type GetHostedFunctionsByFunctionIdLogsResponse = GetHostedFunctionsByFunctionIdLogsResponses[keyof GetHostedFunctionsByFunctionIdLogsResponses];
-
 export type GetHostedFunctionsByFunctionIdToolsData = {
     body?: never;
     path: {
@@ -3002,6 +2978,25 @@ export type GetHostedFunctionsByFunctionIdToolsResponses = {
 };
 
 export type GetHostedFunctionsByFunctionIdToolsResponse = GetHostedFunctionsByFunctionIdToolsResponses[keyof GetHostedFunctionsByFunctionIdToolsResponses];
+
+export type GetDeploymentsStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        hostedFunctionId?: string;
+        serverSlug?: string;
+    };
+    url: '/deployments/status';
+};
+
+export type GetDeploymentsStatusResponses = {
+    /**
+     * Successful response
+     */
+    200: DeploymentStatusResponse;
+};
+
+export type GetDeploymentsStatusResponse = GetDeploymentsStatusResponses[keyof GetDeploymentsStatusResponses];
 
 export type GetDeploymentsLogsData = {
     body?: never;
