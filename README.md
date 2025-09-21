@@ -1,5 +1,5 @@
 <div align="center">
-  <img alt="Two people looking at the blueprint" height="86" src="https://mcpboss.mcp-boss.com/favicon-prod.png" width="86">
+  <img alt="MCP Boss Logo" height="86" src="https://mcpboss.mcp-boss.com/favicon-prod.png" width="86">
   <h1 align="center"><b>mcpboss-js</b></h1>
   <p align="center">🚀 CLI and JavaScript SDK</p>
 </div>
