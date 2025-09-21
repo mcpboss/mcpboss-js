@@ -4,9 +4,7 @@ import { McpBoss } from '../lib/index.js';
 
 [undefined, 'some-org'].forEach(providedOrgId => {
   describe('McpBoss SDK', () => {
-    const sdk = new McpBoss({
-      orgId: providedOrgId,
-    });
+    const sdk = new McpBoss();
 
     it('should create a run with agentId', async () => {
       // Arrange

@@ -1,64 +1,91 @@
-# mcpboss-js
+<div align="center">
+  <img alt="Two people looking at the blueprint" height="86" src="https://mcpboss.mcp-boss.com/favicon-prod.png" width="86">
+  <h1 align="center"><b>mcpboss-js</b></h1>
+  <p align="center">🚀 CLI and JavaScript SDK</p>
+</div>
+<br/>
 
-Official JavaScript/TypeScript SDK for MCP Boss - a powerful LLM Agent + Model Context Protocol (MCP) management platform.
+<p align="center">
+  <a href="https://opensource.org/license/mit" rel="nofollow"><img src="https://img.shields.io/github/license/hey-api/openapi-ts" alt="MIT License"></a>
+  <a href="https://badge.fury.io/js/mcpboss" rel="nofollow"><img src="https://badge.fury.io/js/mcpboss.svg" alt="npm package" /></a>
+</p>
 
-[![npm version](https://badge.fury.io/js/mcpboss.svg)](https://badge.fury.io/js/mcpboss)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://mcp-boss.com">Homepage</a><span>&nbsp;•&nbsp;</span>
+  <a href="https://stackblitz.com/edit/hey-api-example?file=openapi-ts.config.ts,src%2Fclient%2Fschemas.gen.ts,src%2Fclient%2Fsdk.gen.ts,src%2Fclient%2Ftypes.gen.ts">SDK Demo</a>
+  <span>&nbsp;•&nbsp;</span>
+  <a href="https://docs.mcp-boss.com/">API Spec</a>
+  <span>&nbsp;•&nbsp;</span>
+  <a href="https://discord.gg/6TvjvmSP">Discord</a>
+</p>
 
-## What is MCP Boss?
+<br/>
 
-MCP Boss is a management platform for LLM Agents and an MCP gateway management platform, allowing you to orchestrate AI agents with access to various tools and data sources. This SDK provides a simple interface to interact with your MCP Boss tenant programmatically.
-
-## Pre-requisites
-
-You need an account at https://mcp-boss.com
-
-## Installation
+## Install
 
 ```bash
 npm install mcpboss
 ```
 
-## Agent Quick Start
+## Quick Start SDK
 
 ```typescript
 import { McpBoss } from 'mcpboss';
+const client = new McpBoss();
 
-const client = new McpBoss({
-  apiKey: 'your_api_key', // or MCPBOSS_API_KEY
-  orgId: 'your_org_id', // or MCPBOSS_ORG_ID
+// Agents
+await client.query('Current weather?');
+await client.query('Weather tomorrow?', {
+  limitTools: ['getWeather'],
 });
 
-// Simple query
-const response = await client.query('What is the weather today?');
-console.log(response.text);
+// List MCP Servers
+await client.api.getMcpServers();
 ```
 
-## API SDK
+## Quick Start CLI
 
-This library also exposes an SDK for all publically available API endpoints in `McpBoss.api`
-
-```typescript
-import { McpBoss } from 'mcpboss';
-
-const mb = new McpBoss();
-
-const { data: servers } = await mb.api.getMcpServers();
+```bash
+npm i -g mcpboss
+mcpboss config login # login
+mcpboss hosted ls # list hosted tools
 ```
 
-This is an auto-generated SDK based on the OpenAPI specification.
+### Package & Upload Hosted Tool
+
+```bash
+mkdir pkg
+echo 'export const schema = {}' > pkg/index.js
+mcpboss hosted deploy pgk
+```
 
 ## Configuration
 
-### McpBossOptions
+This is the default configuration lookup strategy:
 
-| Option    | Type   | Required | Description                                                             |
-| --------- | ------ | -------- | ----------------------------------------------------------------------- |
-| `apiKey`  | string | No/Env   | Your MCP Boss API key, or set environment variable MCPBOSS_API_KEY.     |
-| `orgId`   | string | No/Env   | Your org identifier, or set environment variable MCPBOSS_ORG_ID.        |
-| `baseUrl` | string | No       | Custom API base URL (defaults to `https://{orgId}.mcp-boss.com/api/v1`) |
+1. Passed options (only SDK)
+2. Environment variables `MCPBOSS_ORG_ID` and `MCPBOSS_API_KEY`
+3. Configurations from `~/.mcpboss.config` in the following order
+   1. `MCPBOSS_ORG_ID`
+   2. The default organization
 
-## Usage
+## SDK
+
+Authentication can be controlled in the constructor by providing a custom `ConfigLoader`:
+
+```typescript
+const client = new McpBoss({ configLoader: ConfigLoader });
+```
+
+The configLoader must follow this shape:
+
+```typescript
+{
+  getConfig(): { baseUrl: string; token: () => Promise<string> } | null;
+}
+```
+
+## Agent Usage
 
 ### Basic Query
 
@@ -87,7 +114,7 @@ const response = await client.query('Search for recent news about AI', {
 });
 ```
 
-## Agent Management
+### Agent Management
 
 The SDK automatically handles agent selection and creation with intelligent fallback logic:
 
@@ -116,15 +143,6 @@ DEBUG=mcpboss node your-script.js
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Documentation**: [API Reference](https://docs.mcp-boss.com)
-- **Discord**: [Join our community](https://discord.gg/6TvjvmSP)
-
-## Related Projects
-
-- [MCP Boss](https://mcp-boss.com) - The main platform
 
 ## Contributing
 

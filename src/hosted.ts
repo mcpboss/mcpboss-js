@@ -5,11 +5,12 @@ import archiver from 'archiver';
 import { createWriteStream } from 'fs';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
-import { McpBoss, loadConfig } from '../lib/index.js';
+import { McpBoss, McpBossConfig } from '../lib/index.js';
 import { HostedToolFunction, DeploymentLogPayload } from '../lib/api/types.gen.js';
 import { EventSource } from 'eventsource';
 import { formDataBodySerializer } from '../lib/api/core/bodySerializer.gen.js';
 import { output, outputError, outputInfo } from './output.js';
+import { OrganizationConfig } from './config.js';
 
 export interface HostedFunctionInfo {
   id: string;
@@ -175,11 +176,10 @@ export async function uploadZipToFunction(mcpBoss: McpBoss, functionId: string, 
   const formData = new FormData();
   formData.append('file', new Blob([new Uint8Array(fileBuffer)]), 'function.zip');
 
-  const config = loadConfig();
-  const uploadResponse = await fetch(`${config.baseUrl}/hosted-functions/${functionId}/upload`, {
+  const uploadResponse = await fetch(`${mcpBoss.config.baseUrl}/hosted-functions/${functionId}/upload`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.apiKey}`,
+      Authorization: `Bearer ${await mcpBoss.config.token()}`,
     },
     body: formData,
   });
@@ -286,21 +286,18 @@ export async function showDeploymentProgress(
       hasCrashed: false,
     };
 
-    // Get the configuration
-    const config = loadConfig();
-
     // Create EventSource URL with query parameter
-    const eventSourceUrl = `${config.baseUrl}/deployments/deployment-logs?hostedFunctionId=${functionId}`;
+    const eventSourceUrl = `${mcpBoss.config.baseUrl}/deployments/deployment-logs?hostedFunctionId=${functionId}`;
 
     outputInfo('Deployment progress...');
 
     const eventSource = new EventSource(eventSourceUrl, {
-      fetch: (input, init) =>
+      fetch: async (input, init) =>
         fetch(input, {
           ...init,
           headers: {
             ...init.headers,
-            Authorization: `Bearer ${config.apiKey}`,
+            Authorization: `Bearer ${await mcpBoss.config.token()}`,
           },
         }),
     });
