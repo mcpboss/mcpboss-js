@@ -50,7 +50,7 @@ export function getErrorMessage(error: unknown): string {
 
 export async function promptForNewFunction(): Promise<{ create: boolean; name?: string }> {
   const create = await confirm({
-    message: 'No hosted function ID provided. Would you like to create a new hosted function?',
+    message: 'No hosted tool ID provided. Would you like to create a new hosted tool?',
     default: true,
   });
 
@@ -59,7 +59,7 @@ export async function promptForNewFunction(): Promise<{ create: boolean; name?: 
   }
 
   const name = await input({
-    message: 'Enter the name for the new hosted function:',
+    message: 'Enter the name for the new hosted tool:',
     validate: input => {
       if (!input.trim()) {
         return 'Function name is required';
@@ -153,11 +153,11 @@ export async function createHostedFunction(
   });
 
   if (error) {
-    throw new Error(`Failed to create hosted function: ${getErrorMessage(error)}`);
+    throw new Error(`Failed to create hosted tool: ${getErrorMessage(error)}`);
   }
 
   if (!data?.function) {
-    throw new Error('Failed to create hosted function: No function data returned');
+    throw new Error('Failed to create hosted tool: No function data returned');
   }
 
   return {
@@ -195,7 +195,7 @@ export async function startHostedFunction(mcpBoss: McpBoss, functionId: string):
   });
 
   if (error) {
-    throw new Error(`Failed to start hosted function: ${getErrorMessage(error)}`);
+    throw new Error(`Failed to start hosted tool: ${getErrorMessage(error)}`);
   }
 }
 
@@ -605,7 +605,7 @@ export async function listHostedFunctions(mcpBoss: McpBoss): Promise<HostedToolF
   const { data, error } = await mcpBoss.api.getHostedFunctions();
 
   if (error) {
-    throw new Error(`Failed to list hosted functions: ${getErrorMessage(error)}`);
+    throw new Error(`Failed to list hosted tools: ${getErrorMessage(error)}`);
   }
 
   return data?.functions || [];
@@ -617,7 +617,7 @@ export async function getHostedFunction(mcpBoss: McpBoss, functionId: string): P
   });
 
   if (error) {
-    throw new Error(`Failed to get hosted function: ${getErrorMessage(error)}`);
+    throw new Error(`Failed to get hosted tool: ${getErrorMessage(error)}`);
   }
 
   if (!data?.function) {

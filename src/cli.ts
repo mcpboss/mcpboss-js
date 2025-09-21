@@ -169,10 +169,10 @@ program
 
 program
   .command('hosted')
-  .description('Manage hosted tool functions')
+  .description('Manage hosted tools')
   .addCommand(
     new Command('deploy')
-      .description('Deploy hosted tool function (new or existing)')
+      .description('Deploy hosted tool (new or existing)')
       .argument('[path]', 'Root directory path for deployment (default: current directory)', process.cwd())
       .option('-i, --id <id>', 'Hosted function ID (if not provided, will create new)')
       .option('--no-progress', 'Skip deployment progress monitoring')
@@ -194,10 +194,10 @@ program
               process.exit(0);
             }
 
-            outputInfo(`Creating new hosted function: ${name}`);
+            outputInfo(`Creating new hosted tool: ${name}`);
             const functionInfo = await createHostedFunction(mcpBoss, name!);
             functionId = functionInfo.id;
-            outputInfo(`Created hosted function with ID: ${functionId}`);
+            outputInfo(`Created hosted tool with ID: ${functionId}`);
           }
 
           const indexCheck = checkIndexJsExists(deploymentPath);
@@ -289,7 +289,7 @@ program
   )
   .addCommand(
     new Command('update')
-      .description('Update hosted tool function metadata (name, description, environment variables)')
+      .description('Update hosted tool metadata (name, description, environment variables)')
       .argument('<functionId>', 'Hosted function ID to update')
       .option('-n, --name <name>', 'Update function name')
       .option('-d, --description <description>', 'Update function description')
@@ -372,15 +372,13 @@ Examples:
               updateData.env = Array.from(envMap.entries());
             }
 
-            outputProgress(`📝 Updating hosted function: ${currentFunction.name} (${functionId})`);
-
             const { error } = await mcpBoss.api.putHostedFunctionsByFunctionId({
               path: { functionId },
               body: updateData,
             });
 
             if (error) {
-              outputError(`Failed to update hosted function: ${getErrorMessage(error)}`);
+              outputError(`Failed to update hosted tool: ${getErrorMessage(error)}`);
               process.exit(1);
             }
 
@@ -396,13 +394,13 @@ Examples:
       )
   )
   .addCommand(
-    new Command('ls').description('List hosted tool functions').action(async () => {
+    new Command('ls').description('List hosted tools').action(async () => {
       try {
         const mcpBoss = new McpBoss();
 
         const functions = await listHostedFunctions(mcpBoss);
 
-        // Define table columns for hosted functions
+        // Define table columns for hosted tools
         const functionsTableColumns: TableColumn[] = [
           { name: 'id', title: 'ID', alignment: 'left' },
           { name: 'name', title: 'Name', alignment: 'left' },
@@ -419,7 +417,7 @@ Examples:
   )
   .addCommand(
     new Command('create')
-      .description('Create a new hosted tool function (without deploying)')
+      .description('Create a new hosted tool (without deploying)')
       .option('-n, --name <name>', 'Function name')
       .option('-d, --description <description>', 'Function description')
       .action(async (options: { name?: string; description?: string }) => {
@@ -430,7 +428,7 @@ Examples:
           if (!functionName) {
             const { input } = await import('@inquirer/prompts');
             functionName = await input({
-              message: 'Enter the name for the new hosted function:',
+              message: 'Enter the name for the new hosted tool:',
               validate: input => {
                 if (!input.trim()) {
                   return 'Function name is required';
@@ -442,8 +440,6 @@ Examples:
               },
             });
           }
-
-          outputProgress(`📝 Creating hosted function: ${functionName}`);
 
           const functionInfo = await createHostedFunction(mcpBoss, functionName, options.description);
 
@@ -464,14 +460,12 @@ Examples:
   )
   .addCommand(
     new Command('get')
-      .description('Get hosted tool function details and show deployment logs')
+      .description('Get hosted tool details and show deployment logs')
       .argument('<functionId>', 'Hosted function ID to retrieve')
       .action(async (functionId: string) => {
         const mcpBoss = new McpBoss();
 
-        outputProgress(`📄 Retrieving hosted function: ${functionId}`);
-
-        // Get the hosted function details
+        // Get the hosted tool details
         const hostedFunction = await getHostedFunction(mcpBoss, functionId);
         const state = await getDeploymentsStatus({ query: { hostedFunctionId: functionId } });
 

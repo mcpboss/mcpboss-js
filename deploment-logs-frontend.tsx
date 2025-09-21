@@ -562,7 +562,7 @@ export function DeploymentLogs({
         </div>
       )}
 
-      {/* If hosted function: call list tools*/}
+      {/* If hosted tool: call list tools*/}
       {hostedFunctionId && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
