@@ -12,8 +12,6 @@
 
 <p align="center">
   <a href="https://mcp-boss.com">Homepage</a><span>&nbsp;•&nbsp;</span>
-  <a href="https://stackblitz.com/edit/hey-api-example?file=openapi-ts.config.ts,src%2Fclient%2Fschemas.gen.ts,src%2Fclient%2Fsdk.gen.ts,src%2Fclient%2Ftypes.gen.ts">SDK Demo</a>
-  <span>&nbsp;•&nbsp;</span>
   <a href="https://docs.mcp-boss.com/">API Spec</a>
   <span>&nbsp;•&nbsp;</span>
   <a href="https://discord.gg/6TvjvmSP">Discord</a>
