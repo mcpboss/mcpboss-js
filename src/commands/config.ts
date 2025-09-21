@@ -76,7 +76,38 @@ export function createConfigCommand(configLoader: ConfigLoader): Command {
             );
           }
         } catch (error) {
-          console.error('Error during login:', error);
+          let didPrintCause = false;
+          if (error instanceof openidClient.ClientError && error.cause) {
+            const cause = error.cause as any;
+            if ('body' in cause && cause.body instanceof ReadableStream) {
+              try {
+                const reader = cause.body.getReader();
+                const chunks: Uint8Array[] = [];
+                let done = false;
+
+                while (!done) {
+                  const { value, done: readerDone } = await reader.read();
+                  done = readerDone;
+                  if (value) {
+                    chunks.push(value);
+                  }
+                }
+
+                const bodyText = new TextDecoder().decode(
+                  new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [] as number[]))
+                );
+                console.error('Failed with message:', bodyText);
+              } catch (streamError) {
+                console.error('Failed to read error body stream:', streamError);
+                console.error('Caused by:', cause.body);
+              } finally {
+                didPrintCause = true;
+              }
+            }
+          }
+          if (!didPrintCause) {
+            console.error('Error during login:', error);
+          }
           process.exit(1);
         }
       })
